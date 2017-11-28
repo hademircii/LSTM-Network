@@ -11,59 +11,39 @@ import re
 import csv
 import random
 from sklearn.preprocessing import LabelEncoder
-import os
 from gensim.models import word2vec
 from sklearn.utils import shuffle
 from nltk import word_tokenize
 #%%
+#convert label to numeric vector
 def label_convert(data):
     enc = LabelEncoder()
-    n_labels = len(set(enc.fit(data).classes_))
+    nLabels = len(set(enc.fit(data).classes_))
     data = enc.transform(data)
-    return np.eye(n_labels)[data]
+    return np.eye(nLabels)[data].astype("int32")
 
-#%%%
-strip_special_chars = re.compile("[^A-Za-z0-9<>\.\,\: ]+")
-
-def process_line(line):
-    
+#process tweets
+def process_line(line):    
     if re.search("http[\S]+", line):
-        line = re.sub("http[\S]+","<url>", line)
-        
-#    if re.search("@[^ \t\n\r\f\v]+", line):
-#       line  = re.sub("@[^\t\n\r\f\v ]+","", line)
-        
-    line = re.sub("\Wamp+","and", line)
-                
-        
+        line = re.sub("http[\S]+","<url>", line)        
+    line = re.sub("\Wamp+","and", line)    
     if re.search("[A-Za-z]\W\w+",line):
-       line  = re.sub("[^A-Za-z\d\s\'\˘\’\.\,]+"," ", line)
-       
-    line = line.lower()
-       
+        line  = re.sub("[^A-Za-z\d\s\'\˘\’\.\,]+"," ", line)
+    line = line.lower()   
     cleanLine = word_tokenize(line)
-    
-    
-      
-#    line = re.sub(strip_special_chars,"", line.lower() )
-    
-#    cleanLine = re.findall(r"[\w']+|[.,!?;]", line)
-    #cleanLine = line.split()
-
     return cleanLine
 
-#%%%
+#single string for word to vec
 def convert_single_string(dataset):
     q = " "
     stringData = []
     for row in dataset:
         line = q.join(row)
         stringData.append(line)
-    string = q.join(stringData)
-    
+    string = q.join(stringData) 
     return {"single_string" : string, "lines" : stringData }
 
-#%%%
+#%% plotter
 def plot(x1, y1, x2, y2, label1 = None, label2 = None, title = None, x_label = None, y_label = None):
     fig = plt.figure(figsize=(8,8))
     ax1 = fig.add_subplot(1,1,1)
@@ -79,57 +59,37 @@ def plot(x1, y1, x2, y2, label1 = None, label2 = None, title = None, x_label = N
     ax1.grid()
     plt.savefig("{}.png".format(title))
     plt.show()
-
 #%%
-path = "./Tweet_Classify"
-os.chdir(path)
-#%%
-#read file TRAIN
+#read files
 f = open('train.csv','r')
-data = list(csv.reader(f))[1:]
-random.shuffle(data)
-#read file TEST
-f = open('new_test.csv','r')
-data2 = list(csv.reader(f)) [1:]
+trainData = list(csv.reader(f))[1:]
+f = open('test.csv','r')
+testData = list(csv.reader(f)) [1:]
 
-
+#shuffle training data 
+random.shuffle(trainData)
 #%%
 #get target and raw input
-trainTarget, trainSentences = zip(*data) #trainIds
-testIds, testTarget, testSentences = zip(*data2) 
+trainTarget, trainSentences = zip(*trainData) #trainIds
+testIds, testTarget, testSentences = zip(*testData) 
 
-#%%
 noRows = len(trainSentences)
 trainTarget = label_convert(trainTarget)
 testTarget = label_convert(testTarget)
+
+
 #%%%
+#clean data
 cleanTrain = [process_line(row) for row in trainSentences]
-#%%
 cleanTest = [process_line(row) for row in testSentences]
 
-#%%
 whole = cleanTrain + cleanTest
-#%%
-model = word2vec.Word2Vec(whole, size  = 20, window = 10, min_count=1, iter = 20)
+#%% train word to vec
 
-#%%
-"""
-def shuffleUnison(data, length, label):
-    list1Shuf = []
-    list2Shuf = []
-    list3Shuf = []
-    indexShuf = range(len(data))
-    shuffle(indexShuf)
-    
-    for i in indexShuf:
-        list1Shuf.append(data[i])
-        list2Shuf.append(length[i])
-        list3Shuf.append(label[i])
-        
-    return list1Shuf, list2Shuf, list3Shuf
-"""
+model = word2vec.Word2Vec(whole, size  = 30, window = 10, min_count=1, iter = 20)
+
 #%%%
-maxLength = 30 #max(trainLen)
+maxLength = 35 #max(trainLen)
 
 trainLen = [min(len(each), maxLength) for each in cleanTrain]
 testLen = [min(len(each), maxLength) for each in cleanTest]
@@ -151,6 +111,7 @@ for row in cleanTrain:
             print("Done with the Row: ", row_count)
             break       
     row_count += 1
+    
 #Test Data
 row_count = 0
 testNumeric = np.zeros((len(cleanTest), maxLength), dtype='int32')
@@ -168,7 +129,7 @@ for row in cleanTest:
             break       
     row_count += 1
 #%%%%
-embeddingMatrix = np.zeros((len(model.wv.vocab), 20), dtype="float32")
+embeddingMatrix = np.zeros((len(model.wv.vocab), 30), dtype="float32")
 for i in range(len(model.wv.vocab)):
     embeddingVector = model.wv[model.wv.index2word[i]]
     if embeddingVector is not None:
@@ -179,40 +140,27 @@ for i in range(len(model.wv.vocab)):
 ValidIndexStart = 4199
 
 batchSize = 100
-lstmUnits = 40
+lstmUnits = 35
 numClasses = 2
 
-nHidden1 = 40   
-#nHidden2 = 64   
-
-epochs = 45
-display_step = 5
-#%% define model
+epochs = 15
+display_step = 1
+#%% define model\
 tf.reset_default_graph()
-
 
 input_data = tf.placeholder(tf.int32, [None, maxLength])
 
 input_length = tf.placeholder(tf.int32, [None])
 
-labels = tf.placeholder(tf.float32, [None, numClasses])
+labels = tf.placeholder(tf.int32, [None, numClasses])
 
 # weight & bias
-weights = {
-    'lstm': tf.Variable(tf.random_normal([lstmUnits, nHidden1])),
-    #'hidden': tf.Variable(tf.random_normal([nHidden1, nHidden2])),
-    'out':  tf.Variable(tf.random_normal([nHidden1, numClasses]))
-}
-biases = {
-    'lstm': tf.Variable(tf.random_normal([nHidden1])),
-   # 'hidden': tf.Variable(tf.random_normal([nHidden2])),
-    'out':  tf.Variable(tf.random_normal([numClasses]))
-}
-
+W =tf.Variable(tf.random_normal([lstmUnits, numClasses]))
+b = tf.Variable(tf.random_normal([numClasses]))
 
 data = tf.nn.embedding_lookup(embeddingMatrix,input_data)
 
-lstmCell = tf.contrib.rnn.GRUCell(lstmUnits)
+lstmCell = tf.contrib.rnn.LSTMCell(lstmUnits)
 lstmCell = tf.contrib.rnn.MultiRNNCell([lstmCell] * 1)
 lstmCell = tf.contrib.rnn.DropoutWrapper(cell=lstmCell, output_keep_prob=0.5)
 
@@ -228,14 +176,7 @@ flat = tf.reshape(value, [-1, tf.shape(value)[2]])
         
 last = tf.gather(flat, index)
 
-
-layer_1 = tf.add(tf.matmul(last, weights['lstm']), biases['lstm'])
-layer_1 =tf.nn.relu(layer_1)
-
-#layer_2 = tf.add(tf.matmul(layer_1, weights['hidden']), biases['hidden'])
-#layer_2 =tf.nn.relu(layer_2)
-
-out_layer = tf.matmul(layer_1, weights['out']) + biases['out']
+out_layer = tf.add(tf.matmul(last,W), b)
 
 prediction = tf.nn.softmax(out_layer)
 
@@ -248,9 +189,6 @@ loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=out_layer,
 
 optimizer = tf.train.AdamOptimizer().minimize(loss)
 
-
-#%%%
-# Initialize the variables
 init = tf.global_variables_initializer()
 
 #%%%
@@ -316,6 +254,17 @@ with tf.Session() as sess:
     # Test model
     testPrediction, testAcc, testLoss = sess.run([prediction, accuracy, loss], feed_dict = {input_data: testNumeric, input_length: testLen, labels: testTarget} )
     
+#%% formatting for plots
+x1, y1 = zip(*valLoss1)
+x2, y2 = zip(*trainLoss1)
+x3, y3 = zip(*valAcc1)
+x4, y4 = zip(*trainAcc1)
+
+
+
+#%%%
+plot(x1, y1, x2, y2, label1 = "Validation Loss", label2 = "Training Loss", title = "Model 1 Loss",y_label = "Loss", x_label = "Epoch")
+plot(x3, y3, x4, y4, label1 = "Validation Accuracy", label2 = "Training Loss", title = "Model 1 Accuracy",y_label = "Accuracy", x_label = "Epoch") 
         
 #%% get predictions for test data
 name = "fp.1"
@@ -327,21 +276,8 @@ for i, row in enumerate(predictions_test_1):
     row.insert(0,i)
     predictions_test_1_id.append(row)
 predictions_test_1_id.insert(0, ["id", "realDonaldTrump", "HillaryClinton"])
+
 with open(name + ".csv", "w") as f:
     writer = csv.writer(f)
     writer.writerows(predictions_test_1_id)
-
-#%% formatting for plots
-x1, y1 = zip(*valLoss1)
-x2, y2 = zip(*trainLoss1)
-x3, y3 = zip(*valAcc1)
-x4, y4 = zip(*trainAcc1)
-
-
-#%%%
-plot(x1, y1, x2, y2, label1 = "Validation Loss", label2 = "Training Loss", title = "Model 1 Loss",y_label = "Loss", x_label = "Epoch")
-plot(x3, y3, x4, y4, label1 = "Validation Accuracy", label2 = "Training Loss", title = "Model 1 Accuracy",y_label = "Accuracy", x_label = "Epoch") 
-
-
-
 
