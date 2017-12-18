@@ -161,7 +161,7 @@ b = tf.Variable(tf.random_normal([numClasses]))
 data = tf.nn.embedding_lookup(embeddingMatrix,input_data)
 
 lstmCell = tf.contrib.rnn.LSTMCell(lstmUnits)
-lstmCell = tf.contrib.rnn.MultiRNNCell([lstmCell] * 1)
+lstmCell = tf.contrib.rnn.MultiRNNCell([lstmCell])
 lstmCell = tf.contrib.rnn.DropoutWrapper(cell=lstmCell, output_keep_prob=0.5)
 
 value, _ = tf.nn.dynamic_rnn(lstmCell, data, dtype=tf.float32, sequence_length=input_length)
